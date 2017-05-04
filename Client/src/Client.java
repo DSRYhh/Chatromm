@@ -1,3 +1,5 @@
+import sun.rmi.runtime.Log;
+
 import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
@@ -10,33 +12,48 @@ public class Client {
     private final String QUIT = "/quit";
 
     private final Socket socket;
+    private final String User;
+    private Writer writer;
+    private Reader reader;
 
     private final String IOEXPECTIONHINT = "IO Exception. Client run failed.";
 
-    public Client(String serverIP, int port) throws IOException {
+    public Client(String serverIP, int port, String user) throws IOException {
         this.socket = new Socket(serverIP, port);
+        this.User = user;
+
+        try {
+            writer = new OutputStreamWriter(socket.getOutputStream());
+            reader = new InputStreamReader(socket.getInputStream());
+        } catch (IOException e) {
+            System.err.println(IOEXPECTIONHINT);
+            return;
+        }
     }
 
     public void Run() {
+        boolean loginResult = Login();
         new Thread(new Sender()).start();
         new Thread(new Receiver()).start();
+    }
+
+    private boolean Login()
+    {
+        String data = "//login " + User;
+        return Send(data);
     }
 
     private class Sender implements Runnable {
 
         public void run() {
             Scanner reader = new Scanner(System.in);
-            Writer writer;
-            try {
-                writer = new OutputStreamWriter(socket.getOutputStream());
-            } catch (IOException e) {
-                System.err.println(IOEXPECTIONHINT);
-                return;
-            }
+            //Writer writer;
+
             while (true)
             {
                 String data = reader.nextLine();
-                if (data.equals(QUIT))
+                boolean result = Send(data);
+                if (!result)
                 {
                     try {
                         writer.close();
@@ -46,16 +63,31 @@ public class Client {
                     }
                     return;
                 }
-                data += (char)0;
-                try {
-                    writer.write(data);
-                    writer.flush();
-                } catch (IOException e) {
-                    System.err.println(IOEXPECTIONHINT);
-                    return;
-                }
             }
         }
+    }
+
+    private boolean Send(String data)
+    {
+        if (data.equals(QUIT))
+        {
+            try {
+                writer.close();
+                socket.close();
+            } catch (IOException e) {
+                System.err.println(IOEXPECTIONHINT);
+            }
+            return false;
+        }
+        data += (char)0;
+        try {
+            writer.write(data);
+            writer.flush();
+        } catch (IOException e) {
+            System.err.println(IOEXPECTIONHINT);
+            return false;
+        }
+        return true;
     }
 
     private class Receiver implements Runnable
@@ -63,7 +95,6 @@ public class Client {
 
         public void run() {
             try {
-                Reader reader = new InputStreamReader(socket.getInputStream());
 
                 while (true)
                 {
@@ -92,7 +123,7 @@ public class Client {
 
     public static void main(String args[]) {
         try {
-            Client client = new Client("localhost",8899);
+            Client client = new Client("localhost",8899,String user);
             client.Run();
         } catch (IOException e) {
             e.printStackTrace();

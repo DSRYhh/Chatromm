@@ -158,6 +158,12 @@ public class Server {
         }).start();
     }
 
+    private class User
+    {
+        public Socket Socket;
+        public String UserName;
+    }
+
     public static void main(String args[]) {
         Server server = new Server(8899);
         server.Run();
