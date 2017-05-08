@@ -2,6 +2,7 @@ import sun.rmi.runtime.Log;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.Random;
 import java.util.Scanner;
 
 /**
@@ -12,7 +13,7 @@ public class Client {
     private final String QUIT = "/quit";
 
     private final Socket socket;
-    private final String User;
+    public String User;
     private Writer writer;
     private Reader reader;
 
@@ -39,7 +40,7 @@ public class Client {
 
     private boolean Login()
     {
-        String data = "//login " + User;
+        String data = "/login " + User;
         return Send(data);
     }
 
@@ -122,8 +123,16 @@ public class Client {
     }
 
     public static void main(String args[]) {
+
         try {
-            Client client = new Client("localhost",8899,String user);
+            Random rdn = new Random();
+            int user = rdn.nextInt(65535);
+            Client client = new Client("localhost",8899,Integer.toString(user));
+            while (!client.Login())
+            {
+                user = rdn.nextInt(65535);
+                client.User = Integer.toString(user);
+            }
             client.Run();
         } catch (IOException e) {
             e.printStackTrace();
