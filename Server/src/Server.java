@@ -18,7 +18,10 @@ public class Server {
 
     private Vector<ClientManager> clients;
 
-    private String LoginRequired = "Login required.";
+    private String LoginRequired = "Invalid command.";
+    private String DuplicatedUserName = "Name exist, please choose another name.";
+    private String LoginSucceed = "You have logined";
+    private String LoginBroadcast = "%s has logined";
 
     /**
      * Create a chatroom server. Must call run() to run the server.
@@ -76,13 +79,21 @@ public class Server {
         Failed,
         Closed
     }
-
+    enum UserCommand
+    {
+        PrivateChat,//to
+        UserQuery,//who
+        HistoryMessages,//history
+        Quit,//quit
+    }
 
     private class ClientManager
     {
         private Socket socket;
         private Reader reader;
         private User user;
+
+        private Vector<String> messages = new Vector<String>();
 
         ClientManager(Socket socket)
         {
@@ -127,12 +138,14 @@ public class Server {
                                         user.IsLogin = ClientLogin(readResult.str,user);
                                         if (!user.IsLogin)
                                         {
-                                            Send(socket,LoginRequired);
+                                            messages.add(LoginRequired);
+                                            Server.this.Send(socket,LoginRequired);
                                         }
                                     }
                                     else
                                     {
-                                        HandleMessage(user,readResult.str);
+
+                                        HandleMessage(ClientManager.this ,readResult.str);
                                     }
                                 }
                                 break;
@@ -199,8 +212,60 @@ public class Server {
         }
 
 
+        private boolean ClientLogin(String command, User user)
+        {
+            Pattern loginPattern = Pattern.compile("\\/login (.+)");
+            Matcher matcher = loginPattern.matcher(command);
+            if (matcher.matches())
+            {
 
-        private void HandleMessage(User sender,String message)
+                String userName = matcher.group(1);
+                user.IsLogin = true;
+
+                if (userName.contains(" "))
+                {
+                    user.IsLogin = false;
+                    this.messages.add("Whitespace is not allowed.");
+                    Server.this.Send(user.Socket,"Whitespace is not allowed.");
+                    return false;
+                }
+
+                for (ClientManager c : clients)//duplicated user name
+                {
+                    if (c.user.UserName == null)
+                    {
+                        continue;
+                    }
+                    if (c.user.UserName.equals(user.UserName))
+                    {
+                        user.IsLogin = false;
+                        c.Send(DuplicatedUserName);
+                        return false;
+                    }
+                }
+
+                //Login succeed
+                user.UserName = userName;
+                for (ClientManager c : clients)
+                {
+                    if (c.user.UserName.equals(user.UserName))
+                    {
+                        c.Send(LoginSucceed);
+                    }
+                    else
+                    {
+                        c.Send(String.format(LoginBroadcast,user.UserName));
+                    }
+                }
+
+                return true;
+            }
+            return false;
+        }
+
+
+
+        private void HandleMessage(ClientManager sender,final String message)
         {
             String presetPattern = "\\/\\/(.+)";
             String commandPattern = "\\/(.+)";
@@ -211,36 +276,61 @@ public class Server {
             }
             else if (message.matches(commandPattern))
             {
-                String command = message.substring(1);
-                HandleCommand(command);
+                String command = message;
+                HandleCommand(sender, command);
             }
             else
             {
-                message = sender.UserName + " say to all " + message;
-                HandleBroadcast(message);
+                HandleBroadcast(sender.user.UserName + " say to all " + message);
             }
         }
 
-        private boolean ClientLogin(String command, User user)
+        private void HandleCommand(ClientManager sender, String command)
         {
-            Pattern loginPattern = Pattern.compile("\\/login (.+)");
-            Matcher matcher = loginPattern.matcher(command);
-            if (matcher.matches())
+            Pattern PrivateChatPattern = Pattern.compile("\\/to (\\S+) (.+)");
+            Pattern UserQueryPattern = Pattern.compile("\\/who");
+            Pattern HistoryMessagesPattern = Pattern.compile("\\/history( \\[[0-9]+ [0-9]+\\])?");
+            Pattern QuitPattern = Pattern.compile("\\/quit");
+
+            Matcher PrivateChatMatcher = PrivateChatPattern.matcher(command);
+            Matcher UserQueryMatcher = UserQueryPattern.matcher(command);
+            Matcher HistoryMessagesMatcher = HistoryMessagesPattern.matcher(command);
+            Matcher QuitMatcher = QuitPattern.matcher(command);
+
+            if (PrivateChatMatcher.matches())
             {
+                String receiverName = PrivateChatMatcher.group(1);
+                ClientManager receiver = FindUser(receiverName);
 
-                user.UserName = matcher.group(1);
-                user.IsLogin = true;
-
-                Send(user.Socket,"Login as " + user.UserName);
-
-                return true;
+                if (receiver == null)//can't find receiver
+                {
+                    sender.Send(String.format("Can't find user %s.",receiverName));
+                }
+                else
+                {
+                    PrivateChat(sender,receiver,PrivateChatMatcher.group(2));
+                }
             }
-            return false;
-        }
-
-        private void HandleCommand(String command)
-        {
-            //TODO
+            else if (UserQueryMatcher.matches())
+            {
+                StringBuilder list = new StringBuilder();
+                for (ClientManager client : clients)
+                {
+                    list.append(client.user.UserName).append("\n");
+                }
+                list.append(String.format("Total online user: %d.\n", clients.size()));
+                sender.Send(list.toString());
+            }
+            else if (HistoryMessagesMatcher.matches())
+            {
+                StringBuilder history = new StringBuilder();
+                for (String m : messages)
+                {
+                    history.append(m + "\n");
+                }
+                sender.Send(history.toString());
+                //TODO history range to be processed
+            }
         }
 
         private void HandlePreset(String preset)
@@ -254,29 +344,55 @@ public class Server {
                 public void run() {
                     for (ClientManager client : clients)
                     {
-                        Socket socket = client.socket;
-                        Send(socket,broadcast);
+                        client.Send(broadcast);
                     }
                 }
             }).start();
         }
+
+
+        private void PrivateChat(ClientManager sender, ClientManager receiver, String message)
+        {
+            sender.Send(String.format("You say to %s: %s",receiver.user.UserName,message));
+            receiver.Send(String.format("%s say to you: %s",sender.user.UserName,message));
+        }
+
+        private void Send(final String message)
+        {
+            this.messages.add(message);
+            Server.this.Send(this.socket,message);
+        }
     }
 
-    private boolean Send(Socket socket, String message)
+    private ClientManager FindUser(String userName)
     {
-        try {
-            Writer writer = new OutputStreamWriter(socket.getOutputStream());
-
-            message += (char)0;
-            writer.write(message);
-            writer.flush();
-
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
-
-            return false;
+        for (ClientManager c : clients)
+        {
+            if (c.user.UserName.equals(userName))
+            {
+                return c;
+            }
         }
+
+        return null;
+    }
+
+    private void Send(final Socket socket, final String message)
+    {
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    Writer writer = new OutputStreamWriter(socket.getOutputStream());
+
+                    writer.write(message + (char)0);
+                    writer.flush();
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+
     }
 
     private class User
