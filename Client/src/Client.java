@@ -1,6 +1,7 @@
 import sun.rmi.runtime.Log;
 
 import java.io.*;
+import java.net.ConnectException;
 import java.net.Socket;
 import java.util.Random;
 import java.util.Scanner;
@@ -17,7 +18,7 @@ public class Client {
     private Writer writer;
     private Reader reader;
 
-    private final String IOEXPECTIONHINT = "IO Exception. Client run failed.";
+    private final String IOEXPECTIONHINT = "Connect to server failed.";
 
     public Client(String serverIP, int port, String user) throws IOException {
         this.socket = new Socket(serverIP, port);
@@ -116,7 +117,7 @@ public class Client {
 
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                System.err.println("Connect to server failed.");
             }
         }
 

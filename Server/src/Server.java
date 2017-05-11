@@ -22,6 +22,7 @@ public class Server {
     private String DuplicatedUserName = "Name exist, please choose another name.";
     private String LoginSucceed = "You have logined";
     private String LoginBroadcast = "%s has logined";
+    private String IllegalCommand = "Illegal command. Check syntax.";
 
     /**
      * Create a chatroom server. Must call run() to run the server.
@@ -78,13 +79,6 @@ public class Server {
         Success,
         Failed,
         Closed
-    }
-    enum UserCommand
-    {
-        PrivateChat,//to
-        UserQuery,//who
-        HistoryMessages,//history
-        Quit,//quit
     }
 
     private class ClientManager
@@ -289,7 +283,7 @@ public class Server {
         {
             Pattern PrivateChatPattern = Pattern.compile("\\/to (\\S+) (.+)");
             Pattern UserQueryPattern = Pattern.compile("\\/who");
-            Pattern HistoryMessagesPattern = Pattern.compile("\\/history( \\[[0-9]+ [0-9]+\\])?");
+            Pattern HistoryMessagesPattern = Pattern.compile("\\/history( [0-9]+ [0-9]+)?");
             Pattern QuitPattern = Pattern.compile("\\/quit");
 
             Matcher PrivateChatMatcher = PrivateChatPattern.matcher(command);
@@ -323,13 +317,15 @@ public class Server {
             }
             else if (HistoryMessagesMatcher.matches())
             {
-                StringBuilder history = new StringBuilder();
-                for (String m : messages)
-                {
-                    history.append(m + "\n");
-                }
-                sender.Send(history.toString());
-                //TODO history range to be processed
+                HistoryQuery(sender,HistoryMessagesMatcher);
+            }
+            else if (QuitMatcher.matches())
+            {
+                this.Quit();
+            }
+            else
+            {
+                sender.Send(IllegalCommand);
             }
         }
 
@@ -356,11 +352,81 @@ public class Server {
             sender.Send(String.format("You say to %s: %s",receiver.user.UserName,message));
             receiver.Send(String.format("%s say to you: %s",sender.user.UserName,message));
         }
+        private void HistoryQuery(ClientManager sender, Matcher HistoryMessagesMatcher)
+        {
+            String index = HistoryMessagesMatcher.group(1);
+            if (index == null)
+            {
+                StringBuilder history = new StringBuilder();
+                for (String m : messages)
+                {
+                    history.append(m + "\n");
+                }
+                sender.Send(history.toString(),false);
+            }
+            else
+            {
+                index = index.trim();
+                String[] indexes = index.split(" ");
+                int startIndex = Integer.parseInt(indexes[0]);
+                int endIndex = Integer.parseInt(indexes[1]);
+                if (startIndex >= endIndex)
+                {
+                    int temp = startIndex;
+                    startIndex = endIndex;
+                    endIndex = temp;
+                }
+
+                if (startIndex < 0 || startIndex >= messages.size())
+                {
+                    sender.Send(IllegalCommand);
+                    return;
+                }
+                if (endIndex < 0 || endIndex >= messages.size())
+                {
+                    sender.Send(IllegalCommand);
+                    return;
+                }
+
+                StringBuilder history = new StringBuilder();
+                for (int i = startIndex; i <= endIndex; i++)
+                {
+                    history.append(messages.elementAt(i) + "\n");
+                }
+                sender.Send(history.toString(),false);
+
+            }
+        }
+        private void Quit()
+        {
+            clients.remove(this);
+            try
+            {
+                this.reader.close();
+                this.socket.close();
+            }
+            catch (Exception ignored)
+            {
+
+            }
+        }
 
         private void Send(final String message)
         {
             this.messages.add(message);
             Server.this.Send(this.socket,message);
+        }
+
+        private void Send(final String message, boolean addToHistory)
+        {
+            if (addToHistory)
+            {
+                Send(message);
+            }
+            else
+            {
+                Server.this.Send(this.socket,message);
+            }
         }
     }
 
