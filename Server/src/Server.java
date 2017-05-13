@@ -1,3 +1,4 @@
+
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -23,6 +24,10 @@ public class Server {
     private String LoginSucceed = "You have logined";
     private String LoginBroadcast = "%s has logined";
     private String IllegalCommand = "Illegal command. Check syntax.";
+    private String IlleaglPreset = "Not such a preset.";
+
+    private String[] PresetMessage = {"Hi, everyone! I'm coming!","There is a smile on %s's face"};
+    private String[] PresetName = {"hi", "smile"};
 
     /**
      * Create a chatroom server. Must call run() to run the server.
@@ -125,10 +130,20 @@ public class Server {
                         {
 
                             case Success:
+                                if (readResult.str.equals("/quit"))
+                                {
+                                    ClientManager.this.Quit();
+                                    break;
+                                }
                                 if (readResult.str.length() != 0)
                                 {
                                     if (!user.IsLogin)
                                     {
+                                        if (readResult.str.equals("/quit"))
+                                        {
+                                            ClientManager.this.Quit();
+                                            break;
+                                        }
                                         user.IsLogin = ClientLogin(readResult.str,user);
                                         if (!user.IsLogin)
                                         {
@@ -138,7 +153,6 @@ public class Server {
                                     }
                                     else
                                     {
-
                                         HandleMessage(ClientManager.this ,readResult.str);
                                     }
                                 }
@@ -265,8 +279,7 @@ public class Server {
             String commandPattern = "\\/(.+)";
             if (message.matches(presetPattern))
             {
-                String preset = message.substring(2);
-                HandlePreset(preset);
+                HandlePreset(sender,message);
             }
             else if (message.matches(commandPattern))
             {
@@ -329,9 +342,59 @@ public class Server {
             }
         }
 
-        private void HandlePreset(String preset)
+        private void HandlePreset(ClientManager sender, String preset)
         {
-            //TODO
+            Pattern presetPattern = Pattern.compile("\\/\\/(\\S+)( \\S+)?");
+            Matcher matcher = presetPattern.matcher(preset);
+            if (!matcher.matches())
+            {
+                sender.Send(IllegalCommand);
+                return;
+            }
+            String presetCommand = matcher.group(1);
+            String receiver = matcher.group(2);
+            String presetMessage = null;
+
+            for (int i = 0; i < PresetName.length; i++)
+            {
+                if (PresetName[i].equals(presetCommand))
+                {
+                    presetMessage = PresetMessage[i];
+                }
+            }
+            if (presetMessage == null)
+            {
+                sender.Send(IlleaglPreset);
+                return;
+            }
+
+            if (receiver == null)
+            {
+                sender.HandleBroadcast(String.format("%s say to all: %s",sender.user.UserName,presetMessage));
+            }
+            else
+            {
+                receiver = receiver.substring(1);//remove the whitespace at the beginning
+                ClientManager receiverManager = FindUser(receiver);
+
+                if (receiverManager == null)
+                {
+                    sender.Send(String.format("Can't find user %s.",receiver));
+                    return;
+                }
+
+                for (ClientManager client : clients)
+                {
+                    if (client == receiverManager)
+                    {
+                        client.Send(String.format("%s say to you: %s", sender.user.UserName,presetMessage));
+                    }
+                    else
+                    {
+                        client.Send(String.format("%s say to %s: %s", sender.user.UserName,client.user.UserName,presetMessage));
+                    }
+                }
+            }
         }
 
         private void HandleBroadcast(final String broadcast)
