@@ -1,9 +1,5 @@
-import sun.rmi.runtime.Log;
-
 import java.io.*;
-import java.net.ConnectException;
 import java.net.Socket;
-import java.util.Random;
 import java.util.Scanner;
 
 /**
@@ -14,15 +10,13 @@ public class Client {
     private final String QUIT = "/quit";
 
     private final Socket socket;
-    public String User;
     private Writer writer;
     private Reader reader;
 
     private final String IOEXPECTIONHINT = "Connect to server failed.";
 
-    public Client(String serverIP, int port, String user) throws IOException {
+    public Client(String serverIP, int port) throws IOException {
         this.socket = new Socket(serverIP, port);
-        this.User = user;
 
         try {
             writer = new OutputStreamWriter(socket.getOutputStream());
@@ -34,15 +28,8 @@ public class Client {
     }
 
     public void Run() {
-        boolean loginResult = Login();
         new Thread(new Sender()).start();
         new Thread(new Receiver()).start();
-    }
-
-    private boolean Login()
-    {
-        String data = "/login " + User;
-        return Send(data);
     }
 
     private class Sender implements Runnable {
@@ -125,15 +112,15 @@ public class Client {
 
     public static void main(String args[]) {
 
+//        Scanner in = new Scanner(System.in);
+//        String user = in.nextLine();
         try {
-            Random rdn = new Random();
-            int user = rdn.nextInt(65535);
-            Client client = new Client("localhost",8899,Integer.toString(user));
-            while (!client.Login())
-            {
-                user = rdn.nextInt(65535);
-                client.User = Integer.toString(user);
-            }
+            Client client = new Client("localhost",8899);
+//            while (!client.Login())
+//            {
+//                user = in.nextLine();
+//                client.User = user;
+//            }
             client.Run();
         } catch (IOException e) {
             e.printStackTrace();

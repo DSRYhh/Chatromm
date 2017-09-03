@@ -67,6 +67,7 @@ public class Server {
         {
             try
             {
+                assert serverSocket != null;
                 Socket socket = serverSocket.accept();
 
                 ClientManager client = new ClientManager(socket);
@@ -112,7 +113,7 @@ public class Server {
             }
         }
 
-        public void Run()
+        void Run()
         {
             new Thread(new Receiver()).start();
         }
@@ -144,12 +145,12 @@ public class Server {
                                             ClientManager.this.Quit();
                                             break;
                                         }
-                                        user.IsLogin = ClientLogin(readResult.str,user);
-                                        if (!user.IsLogin)
-                                        {
-                                            messages.add(LoginRequired);
-                                            Server.this.Send(socket,LoginRequired);
-                                        }
+                                        user.IsLogin = ClientLogin(readResult.str, ClientManager.this);
+//                                        if (!user.IsLogin)
+//                                        {
+//                                            messages.add(LoginRequired);
+//                                            Server.this.Send(socket,LoginRequired);
+//                                        }
                                     }
                                     else
                                     {
@@ -220,8 +221,9 @@ public class Server {
         }
 
 
-        private boolean ClientLogin(String command, User user)
+        private boolean ClientLogin(String command, ClientManager manager)
         {
+            User user = manager.user;
             Pattern loginPattern = Pattern.compile("\\/login (.+)");
             Matcher matcher = loginPattern.matcher(command);
             if (matcher.matches())
@@ -244,10 +246,10 @@ public class Server {
                     {
                         continue;
                     }
-                    if (c.user.UserName.equals(user.UserName))
+                    if (c.user.UserName.equals(userName))
                     {
                         user.IsLogin = false;
-                        c.Send(DuplicatedUserName);
+                        manager.Send(DuplicatedUserName);
                         return false;
                     }
                 }
@@ -268,7 +270,11 @@ public class Server {
 
                 return true;
             }
-            return false;
+            else {
+                messages.add(LoginRequired);
+                manager.Send(LoginRequired);
+                return false;
+            }
         }
 
 
@@ -283,8 +289,7 @@ public class Server {
             }
             else if (message.matches(commandPattern))
             {
-                String command = message;
-                HandleCommand(sender, command);
+                HandleCommand(sender, message);
             }
             else
             {
@@ -423,7 +428,7 @@ public class Server {
                 StringBuilder history = new StringBuilder();
                 for (String m : messages)
                 {
-                    history.append(m + "\n");
+                    history.append(m).append("\n");
                 }
                 sender.Send(history.toString(),false);
             }
@@ -454,7 +459,7 @@ public class Server {
                 StringBuilder history = new StringBuilder();
                 for (int i = startIndex; i <= endIndex; i++)
                 {
-                    history.append(messages.elementAt(i) + "\n");
+                    history.append(messages.elementAt(i)).append("\n");
                 }
                 sender.Send(history.toString(),false);
 
