@@ -92,7 +92,7 @@ public class Server {
         private Socket socket;
         private Reader reader;
         private User user;
-
+        private int id;
         private Vector<String> messages = new Vector<String>();
 
         ClientManager(Socket socket)
@@ -101,7 +101,7 @@ public class Server {
             {
                 this.socket = socket;
                 this.reader = new InputStreamReader(socket.getInputStream());
-
+                this.id = socket.hashCode();
                 this.user = new User();
                 user.Socket = socket;
 
@@ -236,7 +236,7 @@ public class Server {
                 {
                     user.IsLogin = false;
                     this.messages.add("Whitespace is not allowed.");
-                    Server.this.Send(user.Socket,"Whitespace is not allowed.");
+                    Server.this.Send(manager,"Whitespace is not allowed.");
                     return false;
                 }
 
@@ -258,7 +258,7 @@ public class Server {
                 user.UserName = userName;
                 for (ClientManager c : clients)
                 {
-                    if (c.user.UserName.equals(user.UserName))
+                    if (c.id == manager.id)
                     {
                         c.Send(LoginSucceed);
                     }
@@ -482,7 +482,7 @@ public class Server {
         private void Send(final String message)
         {
             this.messages.add(message);
-            Server.this.Send(this.socket,message);
+            Server.this.Send(this, message);
         }
 
         private void Send(final String message, boolean addToHistory)
@@ -493,7 +493,7 @@ public class Server {
             }
             else
             {
-                Server.this.Send(this.socket,message);
+                Server.this.Send(this, message);
             }
         }
     }
@@ -511,8 +511,22 @@ public class Server {
         return null;
     }
 
-    private void Send(final Socket socket, final String message)
+    private ClientManager FindUser(int Id)
     {
+        for (ClientManager c : clients)
+        {
+            if (c.id == Id)
+            {
+                return c;
+            }
+        }
+
+        return null;
+    }
+
+    private void Send(final ClientManager manager, final String message)
+    {
+        final Socket socket = manager.socket;
         new Thread(new Runnable() {
             public void run() {
                 try {
@@ -522,7 +536,8 @@ public class Server {
                     writer.flush();
 
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    System.out.println("Lose connect");
+                    manager.Quit();
                 }
             }
         }).start();
