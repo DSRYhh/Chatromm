@@ -19,6 +19,7 @@ public class Server {
 
     private Vector<ClientManager> clients;
 
+    //Prompt information
     private String LoginRequired = "Invalid command.";
     private String DuplicatedUserName = "Name exist, please choose another name.";
     private String LoginSucceed = "You have logined";
@@ -63,6 +64,7 @@ public class Server {
             }
         }
 
+        //persist running the server
         while (true)
         {
             try
@@ -81,6 +83,7 @@ public class Server {
     }
 
 
+    /*Contains the status of message reader*/
     enum ReaderStatus{
         Success,
         Failed,
@@ -186,6 +189,8 @@ public class Server {
                     StringBuilder stringBuilder = new StringBuilder();
                     String temp;
                     int index;
+                    //receive the message as char and save it in buffer
+                    //receive 64 bytes each time
                     while ((len=reader.read(buffer)) != -1) {
                         temp = new String(buffer, 0, len);
                         if ((index = temp.indexOf((char)0)) != -1) {
@@ -221,6 +226,15 @@ public class Server {
         }
 
 
+        /**
+         * Do client login
+         * The login command should be like /login username
+         * Whitespace is not allowed in username
+         * Will send LoginRequired message back if the command is in invalid format
+         * @param command command received from the client
+         * @param manager corresponding client
+         * @return if login success or not, also return false when user name is already existed
+         */
         private boolean ClientLogin(String command, ClientManager manager)
         {
             User user = manager.user;
@@ -232,6 +246,8 @@ public class Server {
                 String userName = matcher.group(1);
                 user.IsLogin = true;
 
+                //Checking whitespace
+                //whitespace is not allowed in the username
                 if (userName.contains(" "))
                 {
                     user.IsLogin = false;
@@ -240,7 +256,7 @@ public class Server {
                     return false;
                 }
 
-                for (ClientManager c : clients)//duplicated user name
+                for (ClientManager c : clients)//duplicated user name check
                 {
                     if (c.user.UserName == null)
                     {
@@ -271,6 +287,7 @@ public class Server {
                 return true;
             }
             else {
+                //invalid login format
                 messages.add(LoginRequired);
                 manager.Send(LoginRequired);
                 return false;
@@ -278,7 +295,15 @@ public class Server {
         }
 
 
-
+        /**
+         * Handle the client message. Login message is not supposed call this method
+         * 3 types messages is supported
+         * 1. &lt;message&gt; string without any prefix: broadcast a message to all online user
+         * 2. /&lt;message&gt; One slash as a prefix: system command
+         * 3. //&lt;message&gt; Two slashes as prefix: send preset message
+         * @param sender
+         * @param message
+         */
         private void HandleMessage(ClientManager sender,final String message)
         {
             String presetPattern = "\\/\\/(.+)";
@@ -297,6 +322,13 @@ public class Server {
             }
         }
 
+
+        /**
+         * Handle command (one slash as prefix) message received from client
+         * Supported command: to, who, history, quit
+         * @param sender The client where the command comes from
+         * @param command The whole message
+         */
         private void HandleCommand(ClientManager sender, String command)
         {
             Pattern PrivateChatPattern = Pattern.compile("\\/to (\\S+) (.+)");
@@ -309,7 +341,7 @@ public class Server {
             Matcher HistoryMessagesMatcher = HistoryMessagesPattern.matcher(command);
             Matcher QuitMatcher = QuitPattern.matcher(command);
 
-            if (PrivateChatMatcher.matches())
+            if (PrivateChatMatcher.matches()) //to command
             {
                 String receiverName = PrivateChatMatcher.group(1);
                 ClientManager receiver = FindUser(receiverName);
@@ -323,7 +355,7 @@ public class Server {
                     PrivateChat(sender,receiver,PrivateChatMatcher.group(2));
                 }
             }
-            else if (UserQueryMatcher.matches())
+            else if (UserQueryMatcher.matches()) // who command
             {
                 StringBuilder list = new StringBuilder();
                 for (ClientManager client : clients)
@@ -333,11 +365,11 @@ public class Server {
                 list.append(String.format("Total online user: %d.\n", clients.size()));
                 sender.Send(list.toString());
             }
-            else if (HistoryMessagesMatcher.matches())
+            else if (HistoryMessagesMatcher.matches()) // history command
             {
                 HistoryQuery(sender,HistoryMessagesMatcher);
             }
-            else if (QuitMatcher.matches())
+            else if (QuitMatcher.matches()) // quit command
             {
                 this.Quit();
             }
@@ -415,11 +447,19 @@ public class Server {
         }
 
 
+        /**
+         * Handle the /to command
+         */
         private void PrivateChat(ClientManager sender, ClientManager receiver, String message)
         {
             sender.Send(String.format("You say to %s: %s",receiver.user.UserName,message));
             receiver.Send(String.format("%s say to you: %s",sender.user.UserName,message));
         }
+
+
+        /**
+         * Handle the /history command
+         */
         private void HistoryQuery(ClientManager sender, Matcher HistoryMessagesMatcher)
         {
             String index = HistoryMessagesMatcher.group(1);
@@ -465,6 +505,11 @@ public class Server {
 
             }
         }
+
+
+        /**
+         * Delete this client from the server list, disconnect the connection between the server and this client
+         */
         private void Quit()
         {
             clients.remove(this);
@@ -485,6 +530,12 @@ public class Server {
             Server.this.Send(this, message);
         }
 
+
+        /**
+         * Send a message to this client
+         * @param message the message you want to send
+         * @param addToHistory if the message should be added to the message history list
+         */
         private void Send(final String message, boolean addToHistory)
         {
             if (addToHistory)
@@ -498,6 +549,12 @@ public class Server {
         }
     }
 
+
+    /**
+     * Find the user by name
+     * @param userName the name of the client you want to find
+     * @return the corresponding ClientManager
+     */
     private ClientManager FindUser(String userName)
     {
         for (ClientManager c : clients)
@@ -511,6 +568,11 @@ public class Server {
         return null;
     }
 
+    /**
+     * Find the user by user id
+     * @param id the id of the client you want to find
+     * @return the corresponding ClientManager
+     */
     private ClientManager FindUser(int Id)
     {
         for (ClientManager c : clients)
@@ -524,6 +586,13 @@ public class Server {
         return null;
     }
 
+
+    /**
+     * The root send method. All other Send method is a wrapper of this method.
+     * Create a new thread every time call this method
+     * @param manager The client who's supposed to received the message
+     * @param message The message to be sent
+     */
     private void Send(final ClientManager manager, final String message)
     {
         final Socket socket = manager.socket;
@@ -551,6 +620,10 @@ public class Server {
         boolean IsLogin = false;
     }
 
+
+    /**
+     * The server is supposed to run before client run, or the client will have nothing to connect
+     */
     public static void main(String args[]) {
         Server server = new Server(8899);
         server.Run();
